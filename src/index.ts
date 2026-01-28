@@ -16,7 +16,7 @@ import type { RenameResult } from "../../vexa-ide/dist/core/renameApply.js";
 import type { CoreInputEvent } from "./protocol.js";
 
 export interface CoreHostDeps {
-  publishDiagnostics: (uri: string, diags: any[]) => void;
+  publishDiagnostics: (uri: string, diags: any[], version?: number | null) => void;
   // Reservado para hosts con UI (hover/rename necesitan texto por URI).
   getTextForUri: (uri: string) => string | null;
   log?: (msg: string) => void;
@@ -32,7 +32,8 @@ export type CoreCapabilities = {
   canNavigate: boolean;
 };
 
-const IS_DEV = process.env.NODE_ENV !== "production";
+const HAS_PROCESS = typeof process !== "undefined" && !!process?.on;
+const IS_DEV = HAS_PROCESS && process.env?.NODE_ENV !== "production";
 
 export class CoreHost {
   private bus = new SimpleEventBus();
@@ -58,7 +59,7 @@ export class CoreHost {
   };
 
   constructor(private deps: CoreHostDeps) {
-    if (IS_DEV) {
+    if (HAS_PROCESS && IS_DEV) {
       this.exitWarn = () => {
         if (!this.disposed) {
           console.warn("[vexa-core-host] dispose() no fue llamado antes de terminar el proceso");
@@ -72,7 +73,8 @@ export class CoreHost {
     attachSemanticPass(this.bus);
 
     attachDiagnosticsBridge(this.bus, {
-      publishDiagnostics: (uri, diags) => this.deps.publishDiagnostics(uri, diags),
+      publishDiagnostics: (uri, diags, version) =>
+        this.deps.publishDiagnostics(uri, diags, version),
     });
 
     this.unsubscribe = this.bus.subscribe((e) => {
@@ -245,7 +247,7 @@ export class CoreHost {
       this.unsubscribe();
       this.unsubscribe = null;
     }
-    if (this.exitWarn) {
+    if (HAS_PROCESS && this.exitWarn) {
       process.off("exit", this.exitWarn);
       this.exitWarn = undefined;
     }
